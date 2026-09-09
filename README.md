@@ -1,6 +1,6 @@
-# 🎬 Video Resizer Tool (macOS & Windows)
+# 🎬 Video Resizer Tool (macOS)
 
-Công cụ chuyển đổi tỉ lệ khung hình video hàng loạt (Batch Video Resizer), tự động ghép Outro và chèn Watermark/Icon với giao diện trực quan (GUI) hiện đại viết bằng **Python** & **PyQt5**, tối ưu xử lý đa luồng với **FFmpeg**. Hỗ trợ đầy đủ cả hai hệ điều hành **macOS** và **Windows**.
+Công cụ chuyển đổi tỉ lệ khung hình video hàng loạt (Batch Video Resizer), tự động ghép Outro và chèn Watermark/Icon với giao diện trực quan (GUI) hiện đại viết bằng **Python** & **PyQt5**, tối ưu xử lý đa luồng với **FFmpeg** dành riêng cho hệ điều hành **macOS**.
 
 ---
 
@@ -19,44 +19,50 @@ Công cụ chuyển đổi tỉ lệ khung hình video hàng loạt (Batch Video
   - Lưu và tải nhanh các bộ cấu hình đường dẫn Outro theo từng thương hiệu/chiến dịch.
 - ⚡ **Xử lý nhanh & mượt mà (High Performance):**
   - Tận dụng `imageio-ffmpeg` tự động tích hợp FFmpeg, không cần cài đặt phức tạp.
-  - Chạy ngầm không mở cửa sổ đen (`CREATE_NO_WINDOW` trên Windows).
   - Tiến trình xử lý chạy đa luồng (`QThread`), hiển thị thanh tiến trình và log thời gian thực, không bị đơ giao diện.
 
 ---
 
 ## 🚀 Hướng dẫn cài đặt & Khởi chạy (Quick Start)
 
-### 🪟 Dành cho Windows:
-1. Tải source code hoặc file zip về máy và giải nén.
-2. Cài đặt Python 3 (từ [python.org](https://www.python.org/downloads/), **nhớ tích chọn "Add python.exe to PATH"** khi cài).
-3. **Cài đặt thư viện:** Nhấp đúp chuột vào file `install_requirements.bat`.
-4. **Khởi chạy ứng dụng:** Nhấp đúp chuột vào file `run_video_resizer.bat`.
+### 1. Yêu cầu hệ thống (Prerequisites)
+- Hệ điều hành: **macOS**
+- Đã cài đặt **Python 3.8+**
 
-### 🍎 Dành cho macOS:
-1. Mở Terminal và di chuyển vào thư mục dự án:
-   ```bash
-   cd VideoResizerAuto
-   pip3 install -r requirements.txt
-   ```
-2. **Khởi chạy ứng dụng:**
-   - Hoặc gõ `python3 video_resizer.py`
-   - Hoặc nhấp đúp vào file `run_video_resizer.command`.
+### 2. Cài đặt các thư viện phụ thuộc (Install Dependencies)
+Mở ứng dụng **Terminal** và chạy các lệnh sau:
+
+```bash
+# Clone repository về máy
+git clone https://github.com/tivicicreative2024/VideoResizerAuto.git
+cd VideoResizerAuto
+
+# Cài đặt thư viện yêu cầu
+pip3 install -r requirements.txt
+```
+
+### 3. Khởi động ứng dụng (Run Application)
+Bạn có thể khởi động ứng dụng bằng một trong các cách:
+
+- **Cách 1 (Terminal):**
+  ```bash
+  python3 video_resizer.py
+  ```
+- **Cách 2 (Click chuột trên macOS):**
+  Nhấp đúp chuột vào file `run_video_resizer.command` để mở ngay. *(Nếu macOS báo quyền, chạy `chmod +x run_video_resizer.command`)*.
 
 ---
 
-## 📦 Đóng gói thành phần mềm độc lập (.exe / .app)
+## 📦 Hướng dẫn đóng gói file `.app` độc lập (Build macOS App)
 
-### 🪟 Trên Windows (Tạo file `VideoResizer.exe`):
-Nhấp đúp chuột vào file **`build_windows_exe.bat`** (hoặc chạy `pyinstaller VideoResizer_Windows.spec`).  
-File `.exe` sẽ được tạo trong thư mục `dist\VideoResizer\VideoResizer.exe`.
+Nếu muốn đóng gói thành file ứng dụng `.app` để chạy trực tiếp không cần cài Python:
 
-### 🍎 Trên macOS (Tạo ứng dụng `VideoResizer.app`):
-Chạy lệnh trong Terminal:
 ```bash
+pip3 install pyinstaller
 pyinstaller VideoResizer.spec
 ```
-File ứng dụng sẽ được tạo trong thư mục `dist/VideoResizer.app`.
 
+Sau khi hoàn tất, file ứng dụng `VideoResizer.app` sẽ xuất hiện trong thư mục `dist/`.
 
 ---
 
@@ -74,9 +80,6 @@ File ứng dụng sẽ được tạo trong thư mục `dist/VideoResizer.app`.
 ```
 
 ---
-
-## 🤝 Đóng góp (Contributing)
-Mọi đóng góp, báo lỗi (Issues) hoặc Pull Requests đều được hoan nghênh để hoàn thiện công cụ hơn nữa!
 
 ## 📄 Bản quyền (License)
 Dự án được phân phối dưới giấy phép **MIT License**. Xem chi tiết tại [LICENSE](LICENSE).
