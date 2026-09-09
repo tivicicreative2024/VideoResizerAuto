@@ -34,8 +34,8 @@ Mở ứng dụng **Terminal** và chạy các lệnh sau:
 
 ```bash
 # Clone repository về máy
-git clone https://github.com/<your-username>/VideoResizerTool_Mac.git
-cd VideoResizerTool_Mac
+git clone https://github.com/tivicicreative2024/VideoResizerAuto.git
+cd VideoResizerAuto
 
 # Cài đặt thư viện yêu cầu
 pip3 install -r requirements.txt
