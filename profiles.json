@@ -96,9 +96,14 @@
             "outro_vertical": "/Users/cuongcreative/Downloads/Louis/OUTRO VIDEO DOWNLOADER copy 24.x folder/OUTRO VIDEO DOWNLOADER copy 24.x (converted).aep_AME/Vido_Doc_India.mp4"
         },
         "GM": {
-            "outro_square": "/Users/cuongcreative/Downloads/Louis/OUTRO VIDEO DOWNLOADER copy 24.x folder/OUTRO VIDEO DOWNLOADER copy 24.x (converted).aep_AME/Video_Vuong_India.mp4",
-            "outro_horizontal": "/Users/cuongcreative/Downloads/Louis/OUTRO VIDEO DOWNLOADER copy 24.x folder/OUTRO VIDEO DOWNLOADER copy 24.x (converted).aep_AME/Vido_Ngang_India.mp4",
-            "outro_vertical": "/Users/cuongcreative/Downloads/Louis/OUTRO VIDEO DOWNLOADER copy 24.x folder/OUTRO VIDEO DOWNLOADER copy 24.x (converted).aep_AME/Vido_Doc_India.mp4"
+            "outro_square": "/Applications/1Tab.library/images/MTTJYIYCUC2SM.info/GM_Vuong.mp4",
+            "outro_horizontal": "/Applications/1Tab.library/images/MTTJYIYC6GGHC.info/GM_Ngang.mp4",
+            "outro_vertical": "/Applications/1Tab.library/images/MTTJYIYBF4L2G.info/GM_Doc.mp4",
+            "icon_path": null,
+            "icon_x": 0,
+            "icon_y": 0,
+            "icon_scale": 100,
+            "video_scale": 180
         }
     }
 }
