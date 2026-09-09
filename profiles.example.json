@@ -1,0 +1,9 @@
+{
+    "profiles": {
+        "Default": {
+            "outro_square": null,
+            "outro_horizontal": null,
+            "outro_vertical": null
+        }
+    }
+}

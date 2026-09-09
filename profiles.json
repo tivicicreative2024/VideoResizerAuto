@@ -1,0 +1,104 @@
+{
+    "profiles": {
+        "Vido_India": {
+            "outro_square": "/Users/cuongcreative/Downloads/Louis/OUTRO VIDEO DOWNLOADER copy 24.x folder/OUTRO VIDEO DOWNLOADER copy 24.x (converted).aep_AME/Video_Vuong_India.mp4",
+            "outro_horizontal": "/Users/cuongcreative/Downloads/Louis/OUTRO VIDEO DOWNLOADER copy 24.x folder/OUTRO VIDEO DOWNLOADER copy 24.x (converted).aep_AME/Vido_Ngang_India.mp4",
+            "outro_vertical": "/Users/cuongcreative/Downloads/Louis/OUTRO VIDEO DOWNLOADER copy 24.x folder/OUTRO VIDEO DOWNLOADER copy 24.x (converted).aep_AME/Vido_Doc_India.mp4"
+        },
+        "AR DRAWING": {
+            "outro_square": "/Applications/1Tab.library/images/MSE4C50E0A8RV.info/AR SKETCH_Vuong.mp4",
+            "outro_horizontal": "/Applications/1Tab.library/images/MSE4C50EDBFRP.info/AR SKETCH_Ngang.mp4",
+            "outro_vertical": "/Applications/1Tab.library/images/MSE4C50DTPF9B.info/AR SKETCH_Doc.mp4"
+        },
+        "Dog": {
+            "outro_square": "/Applications/1Tab.library/images/MSMXLPPGFTJHE.info/DOG_VUONG.mp4",
+            "outro_horizontal": "/Applications/1Tab.library/images/MSMXLPPGIV38I.info/DOG_NGANG.mp4",
+            "outro_vertical": "/Applications/1Tab.library/images/MSMXLPPFLN617.info/DOG_DOC.mp4"
+        },
+        "Arab": {
+            "outro_square": "/Applications/1Tab.library/images/MSN1SX31GB3AK.info/Video_Vuong_Arab.mp4",
+            "outro_horizontal": "/Applications/1Tab.library/images/MSN1SX332R0SR.info/Vido_Ngang_Arab.mp4",
+            "outro_vertical": "/Applications/1Tab.library/images/MSN1SX32VNL1X.info/Vido_Doc_Arab.mp4"
+        },
+        "Spanish": {
+            "outro_square": "/Applications/1Tab.library/images/MSN1SX31GB3AK.info/Video_Vuong_Arab.mp4",
+            "outro_horizontal": "/Applications/1Tab.library/images/MSN1SX332R0SR.info/Vido_Ngang_Arab.mp4",
+            "outro_vertical": "/Applications/1Tab.library/images/MSN1SX32VNL1X.info/Vido_Doc_Arab.mp4"
+        },
+        "Eng": {
+            "outro_square": "/Applications/1Tab.library/images/MSN1SX32Y11RF.info/Video_Vuong_TBN.mp4",
+            "outro_horizontal": "/Applications/1Tab.library/images/MSN1SX33Q92RS.info/Vido_Ngang_TBN.mp4",
+            "outro_vertical": "/Applications/1Tab.library/images/MSN1SX33EF4VP.info/Vido_Doc_TBN.mp4"
+        },
+        "Eng_2": {
+            "outro_square": "/Applications/1Tab.library/images/MSN1SX32SKP0R.info/Video_Vuong_Indo.mp4",
+            "outro_horizontal": "/Applications/1Tab.library/images/MSN1SX33BG9MO.info/Vido_Ngang_Indo.mp4",
+            "outro_vertical": "/Applications/1Tab.library/images/MSN1SX33FCE9E.info/Vido_Doc_Indo.mp4"
+        },
+        "Voice Screen Lock": {
+            "outro_square": "/Applications/1Tab.library/images/MSOK13E1WI4Q1.info/OUTRO VUÔNG _Voice Lock AI.mp4",
+            "outro_horizontal": "/Applications/1Tab.library/images/MSOK13E1IA0BK.info/OUTRO NGANG_Voice Lock AI.mp4",
+            "outro_vertical": "/Applications/1Tab.library/images/MSOK13E0B7RUH.info/OUTRO DỌC _Voice Lock AI.mp4"
+        },
+        "Caller ID": {
+            "outro_square": "/Applications/1Tab.library/images/MRINSXJ7XH61K.info/Vuong_Numora.mp4",
+            "outro_horizontal": "/Applications/1Tab.library/images/MRINSXJ9WOBCR.info/Ngang_Numora.mp4",
+            "outro_vertical": "/Applications/1Tab.library/images/MRINSXJ9JLF3B.info/Doc_Numora.mp4"
+        },
+        "IPTV": {
+            "outro_square": "/Applications/1Tab.library/images/MSE2P4A5O03RL.info/Vuong_IPTV.mp4",
+            "outro_horizontal": "/Applications/1Tab.library/images/MSE2P4A5ZCQZX.info/Ngang_IPTV.mp4",
+            "outro_vertical": "/Applications/1Tab.library/images/MSE2P4A5R79T3.info/Doc_IPTV.mp4"
+        },
+        "No outro": {
+            "outro_square": "/Applications/1Tab.library/images/MSMXLPPGFTJHE.info/DOG_VUONG.mp4",
+            "outro_horizontal": "/Applications/1Tab.library/images/MSMXLPPGIV38I.info/DOG_NGANG.mp4",
+            "outro_vertical": "/Applications/1Tab.library/images/MSMXLPPFLN617.info/DOG_DOC.mp4"
+        },
+        "No Outro": {
+            "outro_square": null,
+            "outro_horizontal": null,
+            "outro_vertical": null,
+            "icon_path": "/Applications/1Tab.library/images/MT2P4XWTS41YS.info/unnamed (3).png",
+            "icon_x": 832,
+            "icon_y": 10,
+            "icon_scale": 55,
+            "video_scale": 100
+        },
+        "Playzone": {
+            "outro_square": "/Users/cuongcreative/Downloads/Louis/OUTRO VIDEO DOWNLOADER copy 24.x folder/OUTRO VIDEO DOWNLOADER copy 24.x (converted).aep_AME/Video_Vuong_India.mp4",
+            "outro_horizontal": "/Users/cuongcreative/Downloads/Louis/OUTRO VIDEO DOWNLOADER copy 24.x folder/OUTRO VIDEO DOWNLOADER copy 24.x (converted).aep_AME/Vido_Ngang_India.mp4",
+            "outro_vertical": "/Users/cuongcreative/Downloads/Louis/OUTRO VIDEO DOWNLOADER copy 24.x folder/OUTRO VIDEO DOWNLOADER copy 24.x (converted).aep_AME/Vido_Doc_India.mp4"
+        },
+        "Silly": {
+            "outro_square": "/Applications/1Tab.library/images/MT8HQXVLP3K3P.info/Silly_Vuong.mp4",
+            "outro_horizontal": "/Applications/1Tab.library/images/MT8HQXVL8NZQK.info/Silly_Ngang.mp4",
+            "outro_vertical": "/Applications/1Tab.library/images/MT8HQXVK7ZQ6J.info/Silly_Doc.mp4",
+            "icon_path": null,
+            "icon_x": 10,
+            "icon_y": 10,
+            "icon_scale": 100,
+            "video_scale": 100
+        },
+        "Idol Cal": {
+            "outro_square": "/Applications/1Tab.library/images/MT9IAP5DYPLAK.info/Idol Prank_Vuong.mp4",
+            "outro_horizontal": "/Applications/1Tab.library/images/MT9IAY6BA0QB8.info/Idol Prank_Ngang.mp4",
+            "outro_vertical": "/Applications/1Tab.library/images/MT9IASU8PRFCB.info/Idol Prank_Doc.mp4",
+            "icon_path": null,
+            "icon_x": 0,
+            "icon_y": 0,
+            "icon_scale": 100,
+            "video_scale": 100
+        },
+        "AppLock": {
+            "outro_square": "/Users/cuongcreative/Downloads/Louis/OUTRO VIDEO DOWNLOADER copy 24.x folder/OUTRO VIDEO DOWNLOADER copy 24.x (converted).aep_AME/Video_Vuong_India.mp4",
+            "outro_horizontal": "/Users/cuongcreative/Downloads/Louis/OUTRO VIDEO DOWNLOADER copy 24.x folder/OUTRO VIDEO DOWNLOADER copy 24.x (converted).aep_AME/Vido_Ngang_India.mp4",
+            "outro_vertical": "/Users/cuongcreative/Downloads/Louis/OUTRO VIDEO DOWNLOADER copy 24.x folder/OUTRO VIDEO DOWNLOADER copy 24.x (converted).aep_AME/Vido_Doc_India.mp4"
+        },
+        "GM": {
+            "outro_square": "/Users/cuongcreative/Downloads/Louis/OUTRO VIDEO DOWNLOADER copy 24.x folder/OUTRO VIDEO DOWNLOADER copy 24.x (converted).aep_AME/Video_Vuong_India.mp4",
+            "outro_horizontal": "/Users/cuongcreative/Downloads/Louis/OUTRO VIDEO DOWNLOADER copy 24.x folder/OUTRO VIDEO DOWNLOADER copy 24.x (converted).aep_AME/Vido_Ngang_India.mp4",
+            "outro_vertical": "/Users/cuongcreative/Downloads/Louis/OUTRO VIDEO DOWNLOADER copy 24.x folder/OUTRO VIDEO DOWNLOADER copy 24.x (converted).aep_AME/Vido_Doc_India.mp4"
+        }
+    }
+}
