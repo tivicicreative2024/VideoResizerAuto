@@ -1,9 +1,17 @@
 {
     "profiles": {
-        "Default": {
+        "Mặc định": {
             "outro_square": null,
             "outro_horizontal": null,
-            "outro_vertical": null
+            "outro_vertical": null,
+            "icon_path": null,
+            "icon_x": 10,
+            "icon_y": 10,
+            "icon_scale": 100,
+            "video_scale": 100,
+            "render_mode": "balanced",
+            "limit_fps": false,
+            "encoder": "Tự động phát hiện"
         }
     }
 }
