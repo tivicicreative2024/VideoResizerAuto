@@ -32,7 +32,7 @@ The app UI is in Vietnamese.
 
 ## ✨ Features
 
-| | |
+| Feature | Details |
 |---|---|
 | 📐 **Three ratios at once** | `1080×1080`, `1920×1080`, `1080×1920`; per-file zoom of the main video. |
 | 🌫️ **Fast blurred background** | Bicubic pyramid blur, 5–6× faster than a plain Gaussian, in three modes: *Low-spec*, *Balanced*, *High quality*. |

@@ -30,7 +30,7 @@ Video Resizer chuyển hàng loạt video quảng cáo ra **Vuông 1:1**, **Ngan
 
 ## ✨ Tính năng
 
-| | |
+| Tính năng | Chi tiết |
 |---|---|
 | 📐 **3 tỉ lệ cùng lúc** | `1080×1080`, `1920×1080`, `1080×1920`; phóng to video chính riêng cho từng file. |
 | 🌫️ **Nền mờ nhanh** | Bicubic pyramid blur nhanh gấp 5–6 lần Gaussian thường, 3 chế độ: *Máy yếu*, *Cân bằng*, *Chất lượng cao*. |
