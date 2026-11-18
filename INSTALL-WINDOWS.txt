@@ -1,0 +1,66 @@
+VIDEO RESIZER PRO 1.1.2 - WINDOWS X64
+
+1. Copy VideoResizer-Setup-1.1.2-win64.exe to the other computer.
+2. Run the installer, choose the installation folder, and finish.
+3. Open Video Resizer Pro from the Start menu.
+
+Windows 10/11 x64. Python, Qt and FFmpeg are included.
+No internet connection or administrator account is needed for normal use.
+Choose your own video, outro and watermark files on each computer.
+The repository's personal macOS paths are not included in this installer.
+
+Settings: %LOCALAPPDATA%\VideoResizer\profiles.json
+Default install: %LOCALAPPDATA%\Programs\VideoResizer
+Uninstall: Windows Settings > Apps > Video Resizer Pro.
+Uninstalling preserves user profiles and output videos.
+
+The installer is unsigned. Windows may show an unknown publisher warning.
+Processing tests passed locally with the bundled FFmpeg and application code.
+The packaged EXE opened successfully on this Windows machine. Version 1.1.1
+was silently installed into a test folder, opened, checked with its bundled
+FFmpeg and uninstalled successfully. No administrator account was required.
+No separate clean PC or actual GPU encoder hardware was available for testing.
+The unsigned installer may show an unknown-publisher warning on other PCs.
+
+BUILD AGAIN
+Use Python 3.12 x64 and Inno Setup 6.
+Run build_installer.bat from the repository to rebuild the app and installer.
+Exact Python package versions used here are in requirements-build.txt.
+After installing build dependencies, run:
+  .venv\Scripts\python.exe test_packaging.py
+
+Source base: https://github.com/tivicicreative2024/VideoResizerAuto
+Commit: 2fed5f2
+Local packaging changes: per-user Windows settings, clean shipped defaults,
+fixed build script, and a per-user installer. Application source is in source/.
+
+VERSION 1.1.1 - CLINK-INSPIRED UI
+Three steps: Sources > Export settings > Review and export.
+Preview ratio is independent of the output ratios. Preview runs in background.
+Select a source to edit its scale/logo. Apply logo to all when needed.
+Loading a saved template applies its scale/logo to all currently loaded sources.
+
+OUTPUT NAMING
+%F = original filename without extension
+%N = continuous number per output, with configurable start and zero padding
+%S = output ratio: 1x1, 16x9, 9x16
+%D = batch date YYYYMMDD
+%% = literal percent sign
+Example: Team_CuongNM_%N_%S -> Team_CuongNM_001_1x1.mp4
+The source extension is preserved. Do not type an extra extension in the template.
+Duplicate names receive -2, -3, etc. Review shows the exact planned output paths.
+Existing files and sources are never overwritten. Encoding uses private staging
+files, then publishes only successful results. A changed destination requires
+another review; a file created during rendering is left intact and reported.
+
+TESTS
+.venv\Scripts\python.exe -m unittest discover -v
+.venv\Scripts\python.exe test_packaging.py
+
+VERSION 1.1.1 - COMPACT UI
+The header and step navigation use less space. The sidebar contains only preview.
+Select a video and use Chinh video to adjust its scale/logo. Changes apply live.
+Numbering options appear only when the filename template contains %N; values
+are retained when hidden. Use Chen ma to insert tokens.
+Outro and performance controls are expandable, with their existing values kept.
+New/delete preset actions are under Mau khac in the header.

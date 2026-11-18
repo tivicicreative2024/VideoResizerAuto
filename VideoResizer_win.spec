@@ -11,8 +11,10 @@ datas += ffmpeg_datas
 binaries += ffmpeg_binaries
 hiddenimports += ffmpeg_hidden
 
-# Include default profiles
-datas += [('profiles.json', '.')]
+# Personal machine paths must not be distributed to other computers.
+datas += [('profiles.example.json', '.'), ('LICENSE', '.')]
+datas += [('assets', 'assets'), ('ui_theme.qss', '.')]
+hiddenimports += ['PyQt5.QtSvg']
 
 a = Analysis(
     ['video_resizer.py'],
@@ -35,6 +37,7 @@ exe = EXE(
     [],
     exclude_binaries=True,
     name='VideoResizer',
+    icon='assets/brand.ico',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

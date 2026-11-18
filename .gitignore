@@ -45,6 +45,7 @@ coverage.xml
 cover/
 
 # Environments
+.build-tools/
 .env
 .venv
 env/

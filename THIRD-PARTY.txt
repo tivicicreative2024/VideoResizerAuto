@@ -1,0 +1,36 @@
+OPEN SOURCE COMPONENTS
+
+VideoResizerAuto - Copyright (c) 2026 Cuong Creative, MIT.
+https://github.com/tivicicreative2024/VideoResizerAuto
+Local packaging modifications are documented in INSTALL-WINDOWS.txt.
+
+PyQt5 5.15.11 - Riverbank Computing Limited, GPL v3.
+https://www.riverbankcomputing.com/software/pyqt/
+Source: https://pypi.org/project/PyQt5/5.15.11/#files
+Qt 5.15.2 - The Qt Company and contributors, LGPL v3 / GPL.
+Source: https://download.qt.io/archive/qt/5.15/5.15.2/submodules/
+PyQt5-sip 12.20.0 - Riverbank Computing Limited, BSD-2-Clause.
+Source: https://pypi.org/project/PyQt5-sip/12.20.0/#files
+
+imageio-ffmpeg 0.6.0 - imageio contributors, BSD-2-Clause.
+https://github.com/imageio/imageio-ffmpeg/tree/v0.6.0
+Bundled FFmpeg 7.1 essentials build by gyan.dev, GPL v3.
+Source: https://ffmpeg.org/releases/ffmpeg-7.1.tar.xz
+Build configuration and dependencies: https://www.gyan.dev/ffmpeg/builds/
+Run _internal\imageio_ffmpeg\binaries\ffmpeg-win-x86_64-v7.1.exe -version
+to see its complete build configuration and component versions.
+
+Python 3.12.14 - Python Software Foundation License.
+Source and license: https://www.python.org/downloads/source/
+PyInstaller 6.22.3 - GPL v2 or later with bootloader exception.
+https://pyinstaller.org/en/stable/license.html
+Inno Setup 6.4.3 - Jordan Russell and Martijn Laan, Inno Setup License.
+https://github.com/jrsoftware/issrc/tree/is-6_4_3
+
+Third-party components retain their respective licenses; the application's
+MIT license does not replace them. License texts are included in licenses/.
+
+UI fonts: Be Vietnam Pro (Google Fonts) and JetBrains Mono, SIL Open Font License.
+Font license texts: assets/BeVietnamPro-OFL.txt and assets/JetBrainsMono-OFL.txt.
+UI design reference/assets supplied by the user:
+https://www.figma.com/design/zvsa0bgNMWOIbISEr58pUt

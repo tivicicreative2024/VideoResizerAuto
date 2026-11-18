@@ -1,40 +1,18 @@
 @echo off
-chcp 65001 >nul
+setlocal
 cd /d "%~dp0"
-title Đóng gói Video Resizer thành file .EXE
-
-echo ========================================================
-echo        DONG GOI VIDEO RESIZER CHO WINDOWS (.EXE)
-echo ========================================================
-
-python --version >nul 2>&1
-if %errorlevel% neq 0 (
-    echo [LOI] Khong tim thay Python tren he thong!
-    pause
-    exit /b 1
+if not exist ".venv\Scripts\python.exe" (
+    python -m venv .venv
+    if errorlevel 1 goto failed
 )
-
-python -c "import pyinstaller" >nul 2>&1
-if %errorlevel% neq 0 (
-    echo [THONG BAO] Dang cai dat pyinstaller...
-    python -m pip install pyinstaller
-)
-
-echo Dang tien hanh dong goi bang PyInstaller...
-python -m PyInstaller VideoResizer_win.spec --noconfirm
-
-if %errorlevel% equ 0 (
-    echo.
-    echo ========================================================
-    echo [THANH CONG] Ung dung da duoc dong goi tai:
-    echo   dist\VideoResizer\VideoResizer.exe
-    echo ========================================================
-    if exist "profiles.json" (
-        copy /y "profiles.json" "dist\VideoResizer\" >nul
-    )
-) else (
-    echo.
-    echo [LOI] Dong goi that bai. Vui long xem thong bao loi o tren.
-)
-
+".venv\Scripts\python.exe" -m pip install -r requirements-build.txt
+if errorlevel 1 goto failed
+".venv\Scripts\python.exe" -m PyInstaller VideoResizer_win.spec --noconfirm
+if errorlevel 1 goto failed
+echo Application: dist\VideoResizer\VideoResizer.exe
 pause
+exit /b 0
+:failed
+echo Build failed. See the error above.
+pause
+exit /b 1

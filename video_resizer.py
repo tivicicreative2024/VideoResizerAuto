@@ -4,11 +4,14 @@ import subprocess
 import json
 import tempfile
 import shutil
+import re
+from output_naming import plan_outputs, FORMATS, DEFAULT_TEMPLATE
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
                              QLabel, QCheckBox, QPushButton, QFileDialog, QListWidget, 
-                             QProgressBar, QTextEdit, QMessageBox, QFrame, QComboBox, QInputDialog, QSpinBox, QDialog)
-from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer, QPoint
+                             QProgressBar, QTextEdit, QMessageBox, QFrame, QComboBox, QInputDialog, QSpinBox, QDialog, QTableWidgetItem)
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer, QPoint, QStandardPaths
 from PyQt5.QtGui import QFont, QColor, QPalette, QPixmap
+from resizer_ui import build_ui, ThumbnailWorker
 
 def get_ffmpeg_binary():
     # 1. PyInstaller frozen environment
@@ -95,12 +98,13 @@ class WorkerThread(QThread):
     log_signal = pyqtSignal(str)
     progress_signal = pyqtSignal(int, int)
     finished_signal = pyqtSignal(int, int, str)
+    output_signal = pyqtSignal(int, bool)
 
     def __init__(self, input_files, output_dir, do_square, do_horizontal, do_vertical, 
                  outro_square, outro_horizontal, outro_vertical, icon_settings=None, video_scales=None,
-                 render_mode="balanced", selected_encoder="Tự động phát hiện", limit_30fps=False):
+                 render_mode="balanced", selected_encoder="Tự động phát hiện", limit_30fps=False, output_plan=None):
         super().__init__()
-        self.input_files = input_files
+        self.input_files = list(input_files)
         self.output_dir = output_dir
         self.do_square = do_square
         self.do_horizontal = do_horizontal
@@ -108,45 +112,38 @@ class WorkerThread(QThread):
         self.outro_square = outro_square
         self.outro_horizontal = outro_horizontal
         self.outro_vertical = outro_vertical
-        self.icon_settings = icon_settings if icon_settings else {}
-        self.video_scales = video_scales if video_scales else {}
+        self.icon_settings = {key: value.copy() for key, value in (icon_settings or {}).items()}
+        self.video_scales = dict(video_scales or {})
         self.render_mode = render_mode
         self.selected_encoder = selected_encoder
         self.limit_30fps = limit_30fps
+        self.output_plan = output_plan
 
     def run(self):
         total_files = len(self.input_files)
         success_count = 0
-        final_save_dir = self.output_dir if self.output_dir else (os.path.dirname(self.input_files[0]) if total_files > 0 else "")
-        
-        for idx, input_file in enumerate(self.input_files, 1):
-            input_dir = os.path.dirname(input_file)
-            save_dir = self.output_dir if self.output_dir else input_dir
-            input_name, input_ext = os.path.splitext(os.path.basename(input_file))
-            
-            out_square = os.path.join(save_dir, f"{input_name}_1080x1080{input_ext}")
-            out_horizontal = os.path.join(save_dir, f"{input_name}_1920x1080{input_ext}")
-            out_vertical = os.path.join(save_dir, f"{input_name}_1080x1920{input_ext}")
-            
-            self.log_signal.emit(f"[{idx}/{total_files}] Đang xử lý: {os.path.basename(input_file)}")
-            
-            current_scale = self.video_scales.get(input_file, 100)
-            current_icon_set = self.icon_settings.get(input_file, None)
-            
-            success = True
-            if self.do_square:
-                if not self.run_ffmpeg(input_file, 1080, 1080, out_square, self.outro_square, current_scale, current_icon_set): success = False
-            if self.do_horizontal:
-                if not self.run_ffmpeg(input_file, 1920, 1080, out_horizontal, self.outro_horizontal, current_scale, current_icon_set): success = False
-            if self.do_vertical:
-                if not self.run_ffmpeg(input_file, 1080, 1920, out_vertical, self.outro_vertical, current_scale, current_icon_set): success = False
-            
-            if success:
-                success_count += 1
-                
-            self.progress_signal.emit(idx, total_files)
-            
-        self.finished_signal.emit(success_count, total_files, final_save_dir)
+        save_dir = self.output_dir or (os.path.dirname(self.input_files[0]) if total_files else "")
+        try:
+            formats = [size for size, checked in zip(FORMATS, [self.do_square, self.do_horizontal, self.do_vertical]) if checked]
+            plan = self.output_plan if self.output_plan is not None else plan_outputs(self.input_files, self.output_dir, formats)
+            outros = {(1080, 1080): self.outro_square, (1920, 1080): self.outro_horizontal, (1080, 1920): self.outro_vertical}
+            for index, source in enumerate(self.input_files, 1):
+                self.log_signal.emit(f"[{index}/{total_files}] Đang xử lý: {os.path.basename(source)}")
+                success = True
+                for row_index, row in enumerate(plan):
+                    if row["input"] != source:
+                        continue
+                    ok = self.run_ffmpeg(source, row["width"], row["height"], row["output"],
+                                         outros[(row["width"], row["height"])], self.video_scales.get(source, 100),
+                                         self.icon_settings.get(source))
+                    self.output_signal.emit(row_index, ok)
+                    success = success and ok
+                success_count += int(success)
+                self.progress_signal.emit(index, total_files)
+        except (OSError, ValueError) as error:
+            self.log_signal.emit(f"Lỗi xử lý: {error}")
+        finally:
+            self.finished_signal.emit(success_count, total_files, save_dir)
 
     def has_audio(self, file_path):
         # imageio-ffmpeg chỉ cung cấp ffmpeg, không có ffprobe, nhưng có thể dùng ffmpeg để check audio
@@ -159,7 +156,54 @@ class WorkerThread(QThread):
         except Exception:
             return False
 
+    def media_duration(self, file_path):
+        """Seconds from ffmpeg's 'Duration:' line, or None; bounds the silent track for files without audio."""
+        cmd = [FFMPEG_CMD, '-i', file_path]
+        try:
+            creationflags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, creationflags=creationflags)
+            match = re.search(r'Duration: (\d+):(\d+):(\d+(?:\.\d+)?)', result.stderr.decode('utf-8', errors='ignore'))
+            return int(match[1]) * 3600 + int(match[2]) * 60 + float(match[3]) if match else None
+        except Exception:
+            return None
+
+    def silent_input(self, file_path):
+        # anullsrc is endless: without -t, concat never sees the segment end and FFmpeg runs forever.
+        duration = self.media_duration(file_path)
+        if not duration:
+            raise OSError(f"Không đọc được thời lượng của {os.path.basename(file_path)} để tạo âm thanh im lặng.")
+        return ['-f', 'lavfi', '-t', f'{duration:.3f}', '-i', 'anullsrc=channel_layout=stereo:sample_rate=44100']
+
     def run_ffmpeg(self, input_file, target_width, target_height, output_file, outro_file=None, video_scale=100, icon_set=None):
+        try:
+            if os.path.lexists(output_file):
+                raise FileExistsError(f"Đã có file {output_file}; không ghi đè. Hãy cập nhật danh sách tên.")
+            # Only private staging files may be overwritten during a GPU-to-CPU retry.
+            directory = os.path.dirname(os.path.abspath(output_file))
+            with tempfile.TemporaryDirectory(prefix=".videoresizer-", dir=directory) as staging:
+                temp_output = os.path.join(staging, os.path.basename(output_file))
+                if not self._encode_video(input_file, target_width, target_height, temp_output, outro_file, video_scale, icon_set):
+                    return False
+                if not os.path.isfile(temp_output) or os.path.getsize(temp_output) == 0:
+                    raise OSError("FFmpeg không tạo được video đầu ra hợp lệ.")
+                if os.name == 'nt':
+                    os.rename(temp_output, output_file)
+                else:
+                    # Exclusive creation keeps the same no-overwrite guarantee on other platforms.
+                    with open(output_file, 'xb') as destination:
+                        try:
+                            with open(temp_output, 'rb') as source:
+                                shutil.copyfileobj(source, destination)
+                        except BaseException:
+                            destination.close()
+                            os.unlink(output_file)
+                            raise
+            return True
+        except OSError as error:
+            self.log_signal.emit(f"Lỗi xuất {os.path.basename(output_file)}: {error}")
+            return False
+
+    def _encode_video(self, input_file, target_width, target_height, output_file, outro_file=None, video_scale=100, icon_set=None):
         inputs = ['-y', '-threads', '0', '-i', input_file]
         input_idx = 1
         
@@ -246,12 +290,12 @@ class WorkerThread(QThread):
         if outro_file:
             if has_a_main: main_a = "[0:a]"
             else:
-                inputs.extend(['-f', 'lavfi', '-i', 'anullsrc=channel_layout=stereo:sample_rate=44100'])
+                inputs.extend(self.silent_input(input_file))
                 main_a = f"[{input_idx}:a]"; input_idx += 1
                 
             if has_a_outro: outro_a = f"[{outro_idx}:a]"
             else:
-                inputs.extend(['-f', 'lavfi', '-i', 'anullsrc=channel_layout=stereo:sample_rate=44100'])
+                inputs.extend(self.silent_input(outro_file))
                 outro_a = f"[{input_idx}:a]"; input_idx += 1
                 
             filter_complex = v_filter + f"[main_v_icon]{main_a}[outro_v]{outro_a}concat=n=2:v=1:a=1[outv][outa]"
@@ -271,7 +315,7 @@ class WorkerThread(QThread):
             subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=creationflags)
             self.log_signal.emit(f"  -> Xong: {os.path.basename(output_file)}")
             return True
-        except subprocess.CalledProcessError:
+        except (subprocess.CalledProcessError, OSError):
             # Fallback sang CPU nếu mã hóa GPU gặp trục trặc
             if 'GPU' in enc_name:
                 self.log_signal.emit(f"  -> Tự động chuyển CPU dự phòng cho: {os.path.basename(output_file)}")
@@ -290,7 +334,7 @@ class WorkerThread(QThread):
                     subprocess.run(fallback_cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=creationflags)
                     self.log_signal.emit(f"  -> Xong (CPU): {os.path.basename(output_file)}")
                     return True
-                except subprocess.CalledProcessError:
+                except (subprocess.CalledProcessError, OSError):
                     pass
             self.log_signal.emit(f"  -> Lỗi khi xử lý file ra kích thước {target_width}x{target_height}")
             return False
@@ -309,7 +353,7 @@ class PreviewDialog(QDialog):
         
         self.setWindowTitle("Xem trước Video (Kéo thả Icon để di chuyển)")
         self.setMinimumSize(800, 600)
-        self.setStyleSheet("background-color: #242424;")
+        self.setStyleSheet("background-color: #0b1026; color: #f7f7f6;")
         
         layout = QVBoxLayout(self)
         self.view_container = QWidget()
@@ -409,6 +453,7 @@ class PreviewDialog(QDialog):
                 
                 self.main_app.spin_x.blockSignals(False)
                 self.main_app.spin_y.blockSignals(False)
+                self.main_app.on_icon_setting_changed()
 
 class VideoResizerApp(QMainWindow):
     def __init__(self):
@@ -429,11 +474,24 @@ class VideoResizerApp(QMainWindow):
         self.output_dir = None
         self.worker = None
         self.preview_dlg = None
+        self.is_processing = False
+        self.output_plan = []
+        self._ui_ready = False
+        self.thumbnail_worker = None
+        self.thumbnail_pending = False
+        self.thumbnail_pixmap = QPixmap()
+        self.thumbnail_timer = QTimer(self)
+        self.thumbnail_timer.setSingleShot(True)
+        self.thumbnail_timer.timeout.connect(self.update_thumbnail)
         self.preview_timer = QTimer()
         self.preview_timer.setSingleShot(True)
         self.preview_timer.timeout.connect(self.generate_preview)
 
-        if getattr(sys, 'frozen', False):
+        if getattr(sys, 'frozen', False) and sys.platform == 'win32':
+            # Keep user settings writable and separate from installer upgrades.
+            app_dir = os.path.join(QStandardPaths.writableLocation(QStandardPaths.GenericDataLocation), "VideoResizer")
+            os.makedirs(app_dir, exist_ok=True)
+        elif getattr(sys, 'frozen', False):
             app_dir = os.path.dirname(sys.executable)
         else:
             app_dir = os.path.dirname(os.path.abspath(__file__))
@@ -459,420 +517,197 @@ class VideoResizerApp(QMainWindow):
             return False
 
     def setup_ui(self):
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
-        main_layout = QVBoxLayout(central_widget)
-        main_layout.setContentsMargins(20, 20, 20, 20)
-        main_layout.setSpacing(15)
+        build_ui(self, get_available_encoders())
+        self._ui_ready = True
+        self.refresh_output_plan()
+        self.set_step(0)
 
-        # 1. Title
-        title = QLabel("Công cụ Resize Video Hàng Loạt")
-        title_font = "Segoe UI" if sys.platform == "win32" else "Helvetica"
-        title.setFont(QFont(title_font, 20, QFont.Bold))
-        title.setAlignment(Qt.AlignCenter)
-        main_layout.addWidget(title)
+    def selected_formats(self):
+        return [size for size, checkbox in zip(FORMATS, [self.chk_sq, self.chk_hz, self.chk_vt]) if checkbox.isChecked()]
 
-        # Common Button Style
-        btn_style = """
-            QPushButton {
-                background-color: #2980B9;
-                color: white;
-                border: none;
-                border-radius: 5px;
-                padding: 8px 15px;
-                font-weight: bold;
-                font-size: 13px;
-            }
-            QPushButton:hover { background-color: #3498DB; }
-            QPushButton:disabled { background-color: #555555; color: #888888; }
-        """
-        btn_danger_style = btn_style.replace("#2980B9", "#C0392B").replace("#3498DB", "#E74C3C")
+    def naming_settings(self):
+        return {"template": self.name_template.text(), "start": self.number_start.value(),
+                "padding": self.number_padding.currentData()}
 
-        # 1.5 Profiles Block
-        profile_frame = QFrame()
-        profile_frame.setStyleSheet("QFrame { background-color: #2B2B2B; border-radius: 8px; }")
-        profile_layout = QHBoxLayout(profile_frame)
-        profile_layout.setContentsMargins(15, 15, 15, 15)
+    def refresh_output_plan(self, *args):
+        if not self._ui_ready or self.is_processing:
+            return
+        self.numbering_options.setVisible(any(match[1] == 'N' for match in re.finditer(r'%([FNSD%])', self.name_template.text())))
+        error = ""
+        try:
+            self.output_plan = plan_outputs(self.input_files, self.output_dir, self.selected_formats(), **self.naming_settings())
+        except ValueError as exc:
+            self.output_plan = []
+            error = str(exc)
+        self.naming_error.setText(error)
+        self.naming_error.setVisible(bool(error))
+        self.review_error.setText(error)
+        self.review_error.setVisible(bool(error))
+        self.output_table.setRowCount(len(self.output_plan))
+        for index, row in enumerate(self.output_plan):
+            values = [os.path.basename(row["input"]), os.path.basename(row["output"]), row["ratio"].replace("x", ":"),
+                      "Đã tránh trùng" if row["renamed"] else "Sẵn sàng"]
+            for col, value in enumerate(values):
+                item = QTableWidgetItem(value)
+                item.setToolTip(row["output"] if col else row["input"])
+                self.output_table.setItem(index, col, item)
+            self.output_table.setRowHeight(index, 48)
+        self.name_preview.setPlainText("\n".join(os.path.basename(row["output"]) for row in self.output_plan[:3])
+                                       or ("Thêm video ở bước 1 để xem tên đầu ra." if not error else ""))
+        self.output_summary.setText(f"{len(self.output_plan)} file đầu ra · {len(self.input_files)} video × {len(self.selected_formats())} tỉ lệ")
+        self.btn_start.setText(f"Xuất {len(self.output_plan)} file")
+        self.btn_start.setEnabled(bool(self.output_plan) and not self.is_processing)
+        self.source_count.setText(f"{len(self.input_files)} video")
+        step = self.steps.currentIndex()
+        self.btn_next.setEnabled(bool(self.input_files) if step == 0 else bool(self.output_plan))
+        self.btn_remove.setEnabled(bool(self.listbox.selectedItems()))
+        self.btn_edit_video.setEnabled(bool(self.listbox.selectedItems()))
+        if any(row["renamed"] for row in self.output_plan):
+            self.review_error.setText("Đã thêm hậu tố cho tên trùng. Kiểm tra cột tên file trước khi xuất.")
+            self.review_error.show()
 
-        lbl_profile = QLabel("Hồ sơ Outro:")
-        lbl_profile.setStyleSheet("font-size: 14px; font-weight: bold;")
-        profile_layout.addWidget(lbl_profile)
+    def set_step(self, step):
+        if self.is_processing:
+            return
+        if step > 0 and not self.input_files:
+            self.ui_status.setText("Thêm ít nhất một video để tiếp tục.")
+            step = 0
+        elif step == 2 and not self.output_plan:
+            self.ui_status.setText("Kiểm tra tỉ lệ và mẫu tên trước khi tiếp tục.")
+            step = 1
+        step = max(0, min(step, 2))
+        self.steps.setCurrentIndex(step)
+        for i, btn in enumerate(self.step_buttons):
+            btn.setChecked(i == step)
+        self.btn_back.setVisible(step > 0)
+        self.btn_next.setVisible(step < 2)
+        self.btn_next.setText("Tiếp tục: Thiết lập" if step == 0 else "Tiếp tục: Kiểm tra")
+        self.btn_start.setVisible(step == 2)
+        self.step_guidance.setText([
+            "Thêm video, chọn mục rồi mở Chỉnh video nếu cần logo hoặc phóng hình.",
+            "Chọn tỉ lệ và tên file. Kiểm tra ví dụ bên dưới rồi tiếp tục.",
+            "Xem lại danh sách và thư mục lưu trước khi xuất."
+        ][step])
+        self.refresh_output_plan()
 
-        self.cb_profiles = QComboBox()
-        self.cb_profiles.setStyleSheet("""
-            QComboBox {
-                background-color: #1E1E1E;
-                color: white;
-                border: 1px solid #333;
-                border-radius: 5px;
-                padding: 5px;
-                font-size: 13px;
-                min-width: 150px;
-            }
-            QComboBox::drop-down { border: none; }
-        """)
-        self.cb_profiles.currentIndexChanged.connect(self.on_profile_changed)
-        profile_layout.addWidget(self.cb_profiles, 1)
+    def add_video_paths(self, paths):
+        if self.is_processing:
+            return
+        from resizer_ui import VIDEO_EXTENSIONS
+        known = {os.path.abspath(path).casefold() for path in self.input_files}
+        for path in paths:
+            if os.path.splitext(path)[1].lower() not in VIDEO_EXTENSIONS or os.path.isdir(path):
+                continue
+            key = os.path.abspath(path).casefold()
+            if key not in known:
+                known.add(key)
+                self.input_files.append(path)
+                self.video_scales[path] = self.spin_video_scale.value()
+                self.icon_settings[path] = {"path": self.icon_path, "x": self.spin_x.value(),
+                                            "y": self.spin_y.value(), "scale": self.spin_scale.value()}
+        self.update_listbox()
+        self.ui_status.setText(f"Đã chọn {len(self.input_files)} video · Chọn Thiết lập xuất để tiếp tục.")
 
-        self.btn_save_profile = QPushButton("Lưu")
-        self.btn_save_profile.setStyleSheet(btn_style)
-        self.btn_save_profile.clicked.connect(self.save_profile)
-        profile_layout.addWidget(self.btn_save_profile)
+    def remove_selected_video(self):
+        if self.is_processing:
+            return
+        for row in sorted([self.listbox.row(item) for item in self.listbox.selectedItems()], reverse=True):
+            source = self.input_files.pop(row)
+            self.video_scales.pop(source, None)
+            self.icon_settings.pop(source, None)
+        self.update_listbox()
 
-        self.btn_new_profile = QPushButton("Thêm Mới")
-        self.btn_new_profile.setStyleSheet(btn_style)
-        self.btn_new_profile.clicked.connect(self.new_profile)
-        profile_layout.addWidget(self.btn_new_profile)
+    def open_video_editor(self):
+        if self.is_processing or not self.listbox.selectedItems():
+            return
+        self.video_editor.show()
+        self.video_editor.raise_()
+        self.video_editor.activateWindow()
 
-        self.btn_delete_profile = QPushButton("Xoá")
-        self.btn_delete_profile.setStyleSheet(btn_danger_style)
-        self.btn_delete_profile.clicked.connect(self.delete_profile)
-        profile_layout.addWidget(self.btn_delete_profile)
+    def select_output_preview(self, row, column):
+        if row < len(self.output_plan):
+            output = self.output_plan[row]
+            self.listbox.setCurrentRow(self.input_files.index(output["input"]))
+            index = self.preview_ratio.findData((output["width"], output["height"]))
+            self.preview_ratio.setCurrentIndex(index)
+            self.request_thumbnail()
 
-        main_layout.addWidget(profile_frame)
+    def set_processing_state(self, busy):
+        self.is_processing = busy
+        if busy:
+            self.video_editor.close()
+        for control in [self.steps.widget(0), self.steps.widget(1), self.sidebar_scroll, self.video_editor, self.btn_profile_menu,
+                        self.cb_profiles, self.btn_save_profile, self.btn_new_profile, self.btn_delete_profile,
+                        self.btn_output, self.btn_back, self.btn_next] + self.step_buttons:
+            control.setEnabled(not busy)
+        self.btn_start.setEnabled(not busy and bool(self.output_plan))
+        if busy:
+            self.btn_start.setText("Đang xuất…")
+            self.ui_status.setText("Đang xử lý · Giữ ứng dụng mở đến khi hoàn tất.")
+        else:
+            self.btn_start.setText(f"Xuất {len(self.output_plan)} file")
 
-        # 2. Options Block
-        opt_frame = QFrame()
-        opt_frame.setStyleSheet("QFrame { background-color: #2B2B2B; border-radius: 8px; }")
-        opt_layout = QVBoxLayout(opt_frame)
-        opt_layout.setContentsMargins(15, 15, 15, 15)
+    def mark_output_finished(self, row, ok):
+        if row < self.output_table.rowCount():
+            self.output_table.setItem(row, 3, QTableWidgetItem("Hoàn tất" if ok else "Lỗi · xem nhật ký"))
 
-        # Scale video chính
-        h_scale = QHBoxLayout()
-        lbl_v_scale = QLabel("Scale Video Chính (%):")
-        self.spin_video_scale = QSpinBox()
-        self.spin_video_scale.setRange(10, 1000)
-        self.spin_video_scale.setValue(100)
-        self.spin_video_scale.setStyleSheet("QSpinBox { background-color: #1E1E1E; color: white; border: 1px solid #333; padding: 2px; }")
-        self.spin_video_scale.valueChanged.connect(self.on_video_scale_changed)
-        
-        self.btn_copy_scale = QPushButton("Copy")
-        self.btn_copy_scale.setStyleSheet(btn_style)
-        self.btn_copy_scale.clicked.connect(self.copy_scale)
-        
-        self.btn_paste_scale = QPushButton("Paste")
-        self.btn_paste_scale.setStyleSheet(btn_style)
-        self.btn_paste_scale.clicked.connect(self.paste_scale)
-        
-        h_scale.addWidget(lbl_v_scale)
-        h_scale.addWidget(self.spin_video_scale)
-        h_scale.addWidget(self.btn_copy_scale)
-        h_scale.addWidget(self.btn_paste_scale)
-        h_scale.addStretch()
-        opt_layout.addLayout(h_scale)
+    def request_thumbnail(self, *args):
+        if not self._ui_ready:
+            return
+        self.thumbnail_pending = True
+        self.thumbnail_timer.start(180)
 
-        chk_style = """
-            QCheckBox { font-size: 14px; background-color: transparent; }
-            QCheckBox::indicator { width: 20px; height: 20px; }
-        """
+    def update_thumbnail(self):
+        if self.thumbnail_worker and self.thumbnail_worker.isRunning():
+            return
+        self.thumbnail_pending = False
+        row = self.listbox.currentRow()
+        if not 0 <= row < len(self.input_files):
+            self.thumbnail_pixmap = QPixmap()
+            self.thumbnail.clear()
+            self.thumbnail.setText("Chọn video để xem trước")
+            self.selected_video.setText("Chưa có video")
+            return
+        source = self.input_files[row]
+        self.selected_video.setText(os.path.basename(source))
+        if not os.path.isfile(source):
+            self.thumbnail.clear()
+            self.thumbnail.setText("Không tìm thấy video nguồn")
+            return
+        size = self.preview_ratio.currentData()
+        self.preview_caption.setText(f"{size[0]} × {size[1]} · Ảnh xem trước đầu video")
+        self.thumbnail_worker = ThumbnailWorker(FFMPEG_CMD, source, size, self.video_scales.get(source, 100),
+                                               self.icon_settings.get(source, {}).copy(),
+                                               self.cb_render_mode.currentData(), self)
+        self.thumbnail_worker.finished.connect(self.thumbnail_finished)
+        self.thumbnail_worker.start()
 
-        # Vuông
-        h_sq = QHBoxLayout()
-        self.chk_sq = QCheckBox("Video Vuông (1080x1080)")
-        self.chk_sq.setStyleSheet(chk_style)
-        self.chk_sq.setChecked(True)
-        self.chk_sq.setFixedWidth(220)
-        h_sq.addWidget(self.chk_sq)
-        
-        self.btn_outro_sq = QPushButton("Chọn Outro")
-        self.btn_outro_sq.setStyleSheet(btn_style)
-        self.btn_outro_sq.clicked.connect(lambda: self.select_outro("square"))
-        h_sq.addWidget(self.btn_outro_sq)
+    def thumbnail_finished(self):
+        worker = self.thumbnail_worker
+        if not self.thumbnail_pending:
+            if worker.data:
+                self.thumbnail_pixmap.loadFromData(worker.data)
+                self.thumbnail.setPixmap(self.thumbnail_pixmap.scaled(260, 220, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            else:
+                self.thumbnail.clear()
+                self.thumbnail.setText(worker.error)
+        self.thumbnail_worker = None
+        worker.deleteLater()
+        if self.thumbnail_pending:
+            self.thumbnail_timer.start(50)
 
-        self.btn_del_outro_sq = QPushButton("Xóa")
-        self.btn_del_outro_sq.setStyleSheet(btn_danger_style)
-        self.btn_del_outro_sq.clicked.connect(lambda: self.clear_outro("square"))
-        h_sq.addWidget(self.btn_del_outro_sq)
-        
-        self.lbl_outro_sq = QLabel("Không có Outro")
-        self.lbl_outro_sq.setStyleSheet("color: #AAAAAA; background-color: transparent;")
-        h_sq.addWidget(self.lbl_outro_sq, 1)
-        opt_layout.addLayout(h_sq)
-
-        # Ngang
-        h_hz = QHBoxLayout()
-        self.chk_hz = QCheckBox("Video Ngang (1920x1080)")
-        self.chk_hz.setStyleSheet(chk_style)
-        self.chk_hz.setChecked(True)
-        self.chk_hz.setFixedWidth(220)
-        h_hz.addWidget(self.chk_hz)
-        
-        self.btn_outro_hz = QPushButton("Chọn Outro")
-        self.btn_outro_hz.setStyleSheet(btn_style)
-        self.btn_outro_hz.clicked.connect(lambda: self.select_outro("horizontal"))
-        h_hz.addWidget(self.btn_outro_hz)
-
-        self.btn_del_outro_hz = QPushButton("Xóa")
-        self.btn_del_outro_hz.setStyleSheet(btn_danger_style)
-        self.btn_del_outro_hz.clicked.connect(lambda: self.clear_outro("horizontal"))
-        h_hz.addWidget(self.btn_del_outro_hz)
-        
-        self.lbl_outro_hz = QLabel("Không có Outro")
-        self.lbl_outro_hz.setStyleSheet("color: #AAAAAA; background-color: transparent;")
-        h_hz.addWidget(self.lbl_outro_hz, 1)
-        opt_layout.addLayout(h_hz)
-
-        # Dọc
-        h_vt = QHBoxLayout()
-        self.chk_vt = QCheckBox("Video Dọc (1080x1920)")
-        self.chk_vt.setStyleSheet(chk_style)
-        self.chk_vt.setChecked(True)
-        self.chk_vt.setFixedWidth(220)
-        h_vt.addWidget(self.chk_vt)
-        
-        self.btn_outro_vt = QPushButton("Chọn Outro")
-        self.btn_outro_vt.setStyleSheet(btn_style)
-        self.btn_outro_vt.clicked.connect(lambda: self.select_outro("vertical"))
-        h_vt.addWidget(self.btn_outro_vt)
-
-        self.btn_del_outro_vt = QPushButton("Xóa")
-        self.btn_del_outro_vt.setStyleSheet(btn_danger_style)
-        self.btn_del_outro_vt.clicked.connect(lambda: self.clear_outro("vertical"))
-        h_vt.addWidget(self.btn_del_outro_vt)
-        
-        self.lbl_outro_vt = QLabel("Không có Outro")
-        self.lbl_outro_vt.setStyleSheet("color: #AAAAAA; background-color: transparent;")
-        h_vt.addWidget(self.lbl_outro_vt, 1)
-        opt_layout.addLayout(h_vt)
-
-        main_layout.addWidget(opt_frame)
-
-        # 2.5 Icon/Watermark Block
-        icon_frame = QFrame()
-        icon_frame.setStyleSheet("QFrame { background-color: #2B2B2B; border-radius: 8px; }")
-        icon_layout = QVBoxLayout(icon_frame)
-        icon_layout.setContentsMargins(15, 15, 15, 15)
-        
-        h_icon = QHBoxLayout()
-        self.btn_icon = QPushButton("Chọn Logo/Icon")
-        self.btn_icon.setStyleSheet(btn_style)
-        self.btn_icon.clicked.connect(self.select_icon)
-
-        self.btn_del_icon = QPushButton("Xóa Icon")
-        self.btn_del_icon.setStyleSheet(btn_danger_style)
-        self.btn_del_icon.clicked.connect(self.clear_icon)
-
-        self.btn_apply_icon_all = QPushButton("Áp dụng Icon cho tất cả")
-        self.btn_apply_icon_all.setStyleSheet(btn_style)
-        self.btn_apply_icon_all.clicked.connect(self.apply_icon_all)
-        
-        self.lbl_icon = QLabel("Chưa chọn logo")
-        self.lbl_icon.setStyleSheet("color: #AAA;")
-        
-        h_icon.addWidget(self.btn_icon)
-        h_icon.addWidget(self.btn_del_icon)
-        h_icon.addWidget(self.lbl_icon)
-        h_icon.addWidget(self.btn_apply_icon_all)
-        h_icon.addStretch()
-        icon_layout.addLayout(h_icon)
-
-        h_pos = QHBoxLayout()
-        lbl_x = QLabel("X:")
-        self.spin_x = QSpinBox()
-        self.spin_x.setRange(0, 4000)
-        self.spin_x.setStyleSheet("QSpinBox { background-color: #1E1E1E; color: white; border: 1px solid #333; padding: 2px; }")
-        self.spin_x.valueChanged.connect(self.on_icon_setting_changed)
-        
-        lbl_y = QLabel("Y:")
-        self.spin_y = QSpinBox()
-        self.spin_y.setRange(0, 4000)
-        self.spin_y.setStyleSheet("QSpinBox { background-color: #1E1E1E; color: white; border: 1px solid #333; padding: 2px; }")
-        self.spin_y.valueChanged.connect(self.on_icon_setting_changed)
-        
-        lbl_scale = QLabel("Scale (%):")
-        self.spin_scale = QSpinBox()
-        self.spin_scale.setRange(10, 500)
-        self.spin_scale.setValue(100)
-        self.spin_scale.setStyleSheet("QSpinBox { background-color: #1E1E1E; color: white; border: 1px solid #333; padding: 2px; }")
-        self.spin_scale.valueChanged.connect(self.on_icon_setting_changed)
-        
-        h_pos.addWidget(lbl_x)
-        h_pos.addWidget(self.spin_x)
-        h_pos.addWidget(lbl_y)
-        h_pos.addWidget(self.spin_y)
-        h_pos.addWidget(lbl_scale)
-        h_pos.addWidget(self.spin_scale)
-        
-        self.btn_copy_icon = QPushButton("Copy")
-        self.btn_copy_icon.setStyleSheet(btn_style)
-        self.btn_copy_icon.clicked.connect(self.copy_icon)
-        
-        self.btn_paste_icon = QPushButton("Paste")
-        self.btn_paste_icon.setStyleSheet(btn_style)
-        self.btn_paste_icon.clicked.connect(self.paste_icon)
-        
-        h_pos.addWidget(self.btn_copy_icon)
-        h_pos.addWidget(self.btn_paste_icon)
-        
-        h_pos.addStretch()
-        icon_layout.addLayout(h_pos)
-        
-        self.btn_preview = QPushButton("Xem Trước (Preview)")
-        self.btn_preview.setStyleSheet(btn_style)
-        self.btn_preview.clicked.connect(self.generate_preview)
-        icon_layout.addWidget(self.btn_preview)
-        
-        main_layout.addWidget(icon_frame)
-        
-        # 2.8 Render Settings Block (Tối ưu hóa render cho máy cấu hình yếu)
-        render_frame = QFrame()
-        render_frame.setStyleSheet("QFrame { background-color: #2B2B2B; border-radius: 8px; }")
-        render_layout = QVBoxLayout(render_frame)
-        render_layout.setContentsMargins(15, 12, 15, 12)
-        render_layout.setSpacing(10)
-
-        h_render_top = QHBoxLayout()
-        
-        lbl_render_mode = QLabel("Hiệu Năng Render:")
-        lbl_render_mode.setStyleSheet("font-size: 13px; font-weight: bold; color: #FFFFFF;")
-        h_render_top.addWidget(lbl_render_mode)
-        
-        self.cb_render_mode = QComboBox()
-        self.cb_render_mode.setStyleSheet("""
-            QComboBox {
-                background-color: #1E1E1E;
-                color: white;
-                border: 1px solid #333;
-                border-radius: 5px;
-                padding: 5px;
-                font-size: 13px;
-                min-width: 230px;
-            }
-            QComboBox::drop-down { border: none; }
-        """)
-        self.cb_render_mode.addItem("🚀 Tối ưu máy yếu (Nhanh x5, mượt mà)", "low_spec")
-        self.cb_render_mode.addItem("⚖️ Cân bằng (Mặc định - Khuyên dùng)", "balanced")
-        self.cb_render_mode.addItem("💎 Chất lượng cao (Dành cho máy mạnh)", "high_quality")
-        self.cb_render_mode.setCurrentIndex(1)
-        self.cb_render_mode.currentIndexChanged.connect(self.on_render_mode_changed)
-        h_render_top.addWidget(self.cb_render_mode)
-
-        lbl_encoder = QLabel("Bộ Mã Hóa:")
-        lbl_encoder.setStyleSheet("font-size: 13px; font-weight: bold; color: #FFFFFF; margin-left: 10px;")
-        h_render_top.addWidget(lbl_encoder)
-
-        self.cb_encoder = QComboBox()
-        self.cb_encoder.setStyleSheet("""
-            QComboBox {
-                background-color: #1E1E1E;
-                color: white;
-                border: 1px solid #333;
-                border-radius: 5px;
-                padding: 5px;
-                font-size: 13px;
-                min-width: 180px;
-            }
-            QComboBox::drop-down { border: none; }
-        """)
-        self.cb_encoder.addItem("Tự động phát hiện", "Auto")
-        available_encs = get_available_encoders()
-        for enc_name in available_encs.keys():
-            self.cb_encoder.addItem(enc_name, enc_name)
-        h_render_top.addWidget(self.cb_encoder)
-        
-        h_render_top.addStretch()
-        render_layout.addLayout(h_render_top)
-
-        h_render_bot = QHBoxLayout()
-        self.chk_limit_fps = QCheckBox("Giới hạn 30 FPS (Giảm 50% thời gian render cho video 60fps trên máy yếu)")
-        self.chk_limit_fps.setStyleSheet("""
-            QCheckBox { font-size: 13px; color: #DDDDDD; background-color: transparent; }
-            QCheckBox::indicator { width: 18px; height: 18px; }
-        """)
-        self.chk_limit_fps.setChecked(False)
-        h_render_bot.addWidget(self.chk_limit_fps)
-
-        lbl_tip = QLabel("💡 Gợi ý: Chế độ máy yếu áp dụng Bicubic Pyramid Blur giảm tải CPU tối đa mà hình ảnh vẫn mịn màng.")
-        lbl_tip.setStyleSheet("font-size: 11px; color: #888888; background-color: transparent;")
-        lbl_tip.setWordWrap(True)
-        h_render_bot.addWidget(lbl_tip, 1)
-        
-        render_layout.addLayout(h_render_bot)
-        main_layout.addWidget(render_frame)
-        
-        # 3. Output Dir
-        h_out = QHBoxLayout()
-        self.btn_output = QPushButton("Chọn Thư Mục Lưu")
-        self.btn_output.setStyleSheet(btn_style)
-        self.btn_output.clicked.connect(self.select_output_dir)
-        h_out.addWidget(self.btn_output)
-        
-        self.lbl_output = QLabel("Lưu cùng thư mục gốc (Mặc định)")
-        self.lbl_output.setStyleSheet("font-size: 14px; color: white;")
-        h_out.addWidget(self.lbl_output, 1)
-        main_layout.addLayout(h_out)
-
-        # 4. Add/Clear Buttons
-        h_btns = QHBoxLayout()
-        self.btn_add = QPushButton("Thêm Video")
-        self.btn_add.setStyleSheet(btn_style)
-        self.btn_add.clicked.connect(self.add_videos)
-        h_btns.addWidget(self.btn_add)
-        
-        self.btn_clear = QPushButton("Xoá Danh Sách")
-        self.btn_clear.setStyleSheet(btn_danger_style)
-        self.btn_clear.clicked.connect(self.clear_list)
-        h_btns.addWidget(self.btn_clear)
-        h_btns.addStretch()
-        main_layout.addLayout(h_btns)
-
-        # 5. Listbox
-        self.listbox = QListWidget()
-        self.listbox.setStyleSheet("""
-            QListWidget {
-                background-color: #1E1E1E;
-                color: white;
-                border: 1px solid #333;
-                border-radius: 5px;
-                padding: 5px;
-                font-size: 14px;
-            }
-        """)
-        self.listbox.itemSelectionChanged.connect(self.on_listbox_selection_changed)
-        main_layout.addWidget(self.listbox)
-
-        # 6. Progress
-        h_prog = QHBoxLayout()
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setStyleSheet("""
-            QProgressBar {
-                border: 1px solid #333;
-                border-radius: 5px;
-                text-align: center;
-                background-color: #1E1E1E;
-            }
-            QProgressBar::chunk {
-                background-color: #2980B9;
-            }
-        """)
-        self.progress_bar.setValue(0)
-        h_prog.addWidget(self.progress_bar)
-        
-        self.lbl_progress = QLabel("0/0")
-        self.lbl_progress.setStyleSheet("font-weight: bold; font-size: 14px;")
-        h_prog.addWidget(self.lbl_progress)
-        
-        self.btn_start = QPushButton("BẮT ĐẦU XỬ LÝ")
-        self.btn_start.setStyleSheet(btn_style)
-        self.btn_start.clicked.connect(self.start_processing)
-        h_prog.addWidget(self.btn_start)
-        main_layout.addLayout(h_prog)
-
-        # 7. Log Console
-        self.log_box = QTextEdit()
-        self.log_box.setReadOnly(True)
-        self.log_box.setStyleSheet("""
-            QTextEdit {
-                background-color: #1E1E1E;
-                color: #A5D6A7;
-                border: 1px solid #333;
-                border-radius: 5px;
-                font-family: Consolas, Monaco, monospace;
-                font-size: 13px;
-                padding: 5px;
-            }
-        """)
-        main_layout.addWidget(self.log_box)
+    def closeEvent(self, event):
+        if self.worker and self.worker.isRunning():
+            QMessageBox.information(self, "Đang xử lý", "Hãy chờ render hoàn tất trước khi đóng để tránh hỏng file đầu ra.")
+            event.ignore()
+            return
+        self.video_editor.close()
+        self.thumbnail_timer.stop()
+        if self.thumbnail_worker:
+            self.thumbnail_worker.wait(22000)
+        if self.preview_dlg:
+            self.preview_dlg.close()
+        super().closeEvent(event)
 
     def log(self, message):
         self.log_box.append(message)
@@ -905,26 +740,24 @@ class VideoResizerApp(QMainWindow):
         except Exception as e:
             self.log(f"Lỗi khi lưu hồ sơ: {e}")
 
+    def profile_settings(self):
+        return {
+            "outro_square": self.outro_square, "outro_horizontal": self.outro_horizontal,
+            "outro_vertical": self.outro_vertical, "icon_path": self.icon_path,
+            "icon_x": self.spin_x.value(), "icon_y": self.spin_y.value(), "icon_scale": self.spin_scale.value(),
+            "video_scale": self.spin_video_scale.value(), "render_mode": self.cb_render_mode.currentData() or "balanced",
+            "limit_fps": self.chk_limit_fps.isChecked(), "encoder": self.cb_encoder.currentText(),
+            "naming": self.naming_settings(), "formats": [list(size) for size in self.selected_formats()]
+        }
+
     def save_profile(self):
         current_profile = self.cb_profiles.currentText()
         if not current_profile:
             return
-        self.profiles[current_profile] = {
-            "outro_square": self.outro_square,
-            "outro_horizontal": self.outro_horizontal,
-            "outro_vertical": self.outro_vertical,
-            "icon_path": self.icon_path,
-            "icon_x": self.spin_x.value(),
-            "icon_y": self.spin_y.value(),
-            "icon_scale": self.spin_scale.value(),
-            "video_scale": self.spin_video_scale.value(),
-            "render_mode": self.cb_render_mode.currentData() or "balanced",
-            "limit_fps": self.chk_limit_fps.isChecked(),
-            "encoder": self.cb_encoder.currentText()
-        }
+        self.profiles[current_profile] = self.profile_settings()
         self.save_profiles_to_disk()
-        self.log(f"Đã lưu hồ sơ '{current_profile}'")
-        QMessageBox.information(self, "Thành công", f"Đã lưu hồ sơ '{current_profile}'")
+        self.log(f"Đã lưu mẫu '{current_profile}'")
+        self.ui_status.setText(f"Đã lưu mẫu '{current_profile}' · Bao gồm tên file và tỉ lệ xuất.")
 
     def new_profile(self):
         text, ok = QInputDialog.getText(self, "Hồ sơ mới", "Nhập tên hồ sơ:")
@@ -935,11 +768,7 @@ class VideoResizerApp(QMainWindow):
             if text in self.profiles:
                 QMessageBox.warning(self, "Lỗi", "Tên hồ sơ đã tồn tại!")
                 return
-            self.profiles[text] = {
-                "outro_square": self.outro_square,
-                "outro_horizontal": self.outro_horizontal,
-                "outro_vertical": self.outro_vertical
-            }
+            self.profiles[text] = self.profile_settings()
             self.cb_profiles.blockSignals(True)
             self.cb_profiles.addItem(text)
             self.cb_profiles.setCurrentText(text)
@@ -973,6 +802,11 @@ class VideoResizerApp(QMainWindow):
         current_profile = self.cb_profiles.currentText()
         if current_profile in self.profiles:
             data = self.profiles[current_profile]
+            controls = [self.spin_x, self.spin_y, self.spin_scale, self.spin_video_scale, self.cb_render_mode,
+                        self.cb_encoder, self.chk_limit_fps, self.name_template, self.number_start,
+                        self.number_padding, self.chk_sq, self.chk_hz, self.chk_vt]
+            for control in controls:
+                control.blockSignals(True)
             self.outro_square = data.get("outro_square")
             self.outro_horizontal = data.get("outro_horizontal")
             self.outro_vertical = data.get("outro_vertical")
@@ -985,9 +819,7 @@ class VideoResizerApp(QMainWindow):
             r_mode = data.get("render_mode", "balanced")
             idx = self.cb_render_mode.findData(r_mode)
             if idx >= 0:
-                self.cb_render_mode.blockSignals(True)
                 self.cb_render_mode.setCurrentIndex(idx)
-                self.cb_render_mode.blockSignals(False)
                 
             enc = data.get("encoder", "Tự động phát hiện")
             e_idx = self.cb_encoder.findText(enc)
@@ -1007,6 +839,23 @@ class VideoResizerApp(QMainWindow):
             
             self.lbl_outro_vt.setText(os.path.basename(self.outro_vertical) if self.outro_vertical else "Không có Outro")
             self.lbl_outro_vt.setStyleSheet("color: white;" if self.outro_vertical else "color: #AAAAAA;")
+
+            naming = data.get("naming") or {}
+            self.name_template.setText(naming.get("template", DEFAULT_TEMPLATE))
+            self.number_start.setValue(naming.get("start", 1))
+            index = self.number_padding.findData(naming.get("padding", 3))
+            self.number_padding.setCurrentIndex(index if index >= 0 else 2)
+            formats = data.get("formats", [list(size) for size in FORMATS])
+            for checkbox, size in zip([self.chk_sq, self.chk_hz, self.chk_vt], FORMATS):
+                checkbox.setChecked(list(size) in formats)
+            for control in controls:
+                control.blockSignals(False)
+            for source in self.input_files:
+                self.video_scales[source] = self.spin_video_scale.value()
+                self.icon_settings[source] = {"path": self.icon_path, "x": self.spin_x.value(),
+                                              "y": self.spin_y.value(), "scale": self.spin_scale.value()}
+            self.on_listbox_selection_changed()
+            self.refresh_output_plan()
 
     def on_render_mode_changed(self):
         mode = self.cb_render_mode.currentData()
@@ -1104,20 +953,12 @@ class VideoResizerApp(QMainWindow):
         if folder:
             self.output_dir = folder
             self.lbl_output.setText(folder)
+            self.lbl_output.setToolTip(folder)
+            self.refresh_output_plan()
 
     def add_videos(self):
-        files, _ = QFileDialog.getOpenFileNames(self, "Chọn Các Video", "", "Video Files (*.mp4 *.mov *.avi *.mkv *.webm);;All Files (*.*)")
-        if files:
-            count = 0
-            for f in files:
-                if f not in self.input_files:
-                    self.input_files.append(f)
-                    self.video_scales[f] = 100
-                    self.icon_settings[f] = {"path": None, "x": 0, "y": 0, "scale": 100}
-                    count += 1
-            self.update_listbox()
-            if count > 0:
-                self.log(f"Đã thêm {count} file.")
+        files, _ = QFileDialog.getOpenFileNames(self, "Chọn video", "", "Video (*.mp4 *.mov *.avi *.mkv *.webm)")
+        self.add_video_paths(files)
 
     def clear_list(self):
         self.input_files.clear()
@@ -1127,11 +968,19 @@ class VideoResizerApp(QMainWindow):
         self.log("Đã xoá danh sách file.")
 
     def update_listbox(self):
+        selected = self.listbox.currentRow()
+        self.listbox.blockSignals(True)
         self.listbox.clear()
         for i, f in enumerate(self.input_files, 1):
             scale = self.video_scales.get(f, 100)
             self.listbox.addItem(f"{i}. {os.path.basename(f)} (Scale: {scale}%)")
-        self.lbl_progress.setText(f"0/{len(self.input_files)}")
+        self.listbox.blockSignals(False)
+        if self.input_files:
+            self.listbox.setCurrentRow(max(0, min(selected, len(self.input_files) - 1)))
+        else:
+            self.on_listbox_selection_changed()
+        self.lbl_progress.setText(f"0/{len(self.input_files)} video")
+        self.refresh_output_plan()
 
     def start_processing(self):
         if not self.input_files:
@@ -1146,39 +995,25 @@ class VideoResizerApp(QMainWindow):
             QMessageBox.warning(self, "Cảnh báo", "Vui lòng chọn ít nhất 1 định dạng xuất ra.")
             return
 
-        self.btn_start.setEnabled(False)
-        self.btn_add.setEnabled(False)
-        self.btn_clear.setEnabled(False)
-        self.chk_sq.setEnabled(False)
-        self.chk_hz.setEnabled(False)
-        self.chk_vt.setEnabled(False)
-        self.btn_output.setEnabled(False)
-        self.btn_outro_sq.setEnabled(False)
-        self.btn_outro_hz.setEnabled(False)
-        self.btn_outro_vt.setEnabled(False)
-        self.btn_del_outro_sq.setEnabled(False)
-        self.btn_del_outro_hz.setEnabled(False)
-        self.btn_del_outro_vt.setEnabled(False)
-        self.btn_icon.setEnabled(False)
-        self.btn_del_icon.setEnabled(False)
-        self.btn_apply_icon_all.setEnabled(False)
-        self.btn_preview.setEnabled(False)
-        self.spin_x.setEnabled(False)
-        self.spin_y.setEnabled(False)
-        self.spin_scale.setEnabled(False)
-        self.spin_video_scale.setEnabled(False)
-        self.btn_copy_scale.setEnabled(False)
-        self.btn_paste_scale.setEnabled(False)
-        self.btn_copy_icon.setEnabled(False)
-        self.btn_paste_icon.setEnabled(False)
-        self.cb_profiles.setEnabled(False)
-        self.btn_save_profile.setEnabled(False)
-        self.btn_new_profile.setEnabled(False)
-        self.btn_delete_profile.setEnabled(False)
-        self.cb_render_mode.setEnabled(False)
-        self.cb_encoder.setEnabled(False)
-        self.chk_limit_fps.setEnabled(False)
-        
+        reviewed = [row["output"] for row in self.output_plan]
+        self.refresh_output_plan()
+        if reviewed != [row["output"] for row in self.output_plan] and self.steps.currentIndex() == 2:
+            self.ui_status.setText("Đã cập nhật tên do có file mới trong thư mục. Kiểm tra danh sách rồi nhấn Xuất lần nữa.")
+            return
+        if not self.output_plan:
+            self.set_step(1)
+            return
+        for source in self.input_files:
+            if not os.path.isfile(source):
+                QMessageBox.warning(self, "Thiếu nguồn", f"Không tìm thấy video: {source}")
+                return
+        for path in [self.outro_square if do_sq else None, self.outro_horizontal if do_hz else None,
+                     self.outro_vertical if do_vt else None] + [item.get("path") for item in self.icon_settings.values()]:
+            if path and not os.path.isfile(path):
+                QMessageBox.warning(self, "Thiếu tài nguyên", f"Không tìm thấy outro hoặc logo: {path}")
+                return
+        self.set_step(2)
+        self.set_processing_state(True)
         self.progress_bar.setValue(0)
         self.log("Bắt đầu xử lý...")
         
@@ -1189,13 +1024,16 @@ class VideoResizerApp(QMainWindow):
         self.worker = WorkerThread(self.input_files, self.output_dir, do_sq, do_hz, do_vt,
                                    self.outro_square, self.outro_horizontal, self.outro_vertical,
                                    self.icon_settings, self.video_scales,
-                                   render_mode=render_mode, selected_encoder=encoder_choice, limit_30fps=limit_30fps)
+                                   render_mode=render_mode, selected_encoder=encoder_choice, limit_30fps=limit_30fps,
+                                   output_plan=[row.copy() for row in self.output_plan])
+        self.worker.output_signal.connect(self.mark_output_finished)
         self.worker.log_signal.connect(self.log)
         self.worker.progress_signal.connect(self.update_progress)
         self.worker.finished_signal.connect(self.finish_processing)
         self.worker.start()
 
     def on_spin_changed(self):
+        self.request_thumbnail()
         if self.preview_dlg and self.preview_dlg.isVisible():
             self.preview_timer.start(500)
 
@@ -1231,6 +1069,11 @@ class VideoResizerApp(QMainWindow):
                 self.lbl_icon.setStyleSheet("color: #AAAAAA; background-color: transparent;")
                 self.icon_path = None
                 
+        self.selected_video.setText(os.path.basename(self.input_files[selected_row]) if 0 <= selected_row < len(self.input_files) else "Chưa có video")
+        self.btn_remove.setEnabled(bool(self.listbox.selectedItems()) and not self.is_processing)
+        self.btn_edit_video.setEnabled(bool(self.listbox.selectedItems()) and not self.is_processing)
+        if not self.listbox.selectedItems():
+            self.video_editor.close()
         self.on_spin_changed()
 
     def on_icon_setting_changed(self):
@@ -1310,7 +1153,7 @@ class VideoResizerApp(QMainWindow):
 
     def update_progress(self, current, total):
         self.progress_bar.setValue(int((current / total) * 100))
-        self.lbl_progress.setText(f"{current}/{total}")
+        self.lbl_progress.setText(f"{current}/{total} video")
 
     def generate_preview(self):
         if not self.input_files:
@@ -1327,15 +1170,9 @@ class VideoResizerApp(QMainWindow):
         icon_set = self.icon_settings.get(input_file, {"path": None, "x": 0, "y": 0, "scale": 100})
         temp_img = os.path.join(tempfile.gettempdir(), f"video_resizer_preview_{os.getpid()}.jpg")
         
-        # Decide format for preview based on checked boxes. Priority: Square -> Horizontal -> Vertical
-        target_width, target_height = 1080, 1080
-        if self.chk_hz.isChecked() and not self.chk_sq.isChecked():
-            target_width, target_height = 1920, 1080
-        elif self.chk_vt.isChecked() and not self.chk_sq.isChecked() and not self.chk_hz.isChecked():
-            target_width, target_height = 1080, 1920
-            
-        inputs = ['-y', '-threads', '0', '-ss', '00:00:02', '-i', input_file]
-        
+        target_width, target_height = self.preview_ratio.currentData()
+        inputs = ['-y', '-threads', '0', '-i', input_file]
+
         # Tối ưu hoá blur nền cho preview (render tức thì < 0.2s với Bicubic Spline)
         bg_w = max(16, (target_width // 4) & ~1)
         bg_h = max(16, (target_height // 4) & ~1)
@@ -1381,39 +1218,8 @@ class VideoResizerApp(QMainWindow):
             QMessageBox.critical(self, "Lỗi", "Không thể tạo ảnh xem trước. Video có thể bị lỗi hoặc FFmpeg gặp vấn đề.")
 
     def finish_processing(self, success_count, total_files, save_dir):
-        self.btn_start.setEnabled(True)
-        self.btn_add.setEnabled(True)
-        self.btn_clear.setEnabled(True)
-        self.chk_sq.setEnabled(True)
-        self.chk_hz.setEnabled(True)
-        self.chk_vt.setEnabled(True)
-        self.btn_output.setEnabled(True)
-        self.btn_outro_sq.setEnabled(True)
-        self.btn_outro_hz.setEnabled(True)
-        self.btn_outro_vt.setEnabled(True)
-        self.btn_del_outro_sq.setEnabled(True)
-        self.btn_del_outro_hz.setEnabled(True)
-        self.btn_del_outro_vt.setEnabled(True)
-        self.btn_icon.setEnabled(True)
-        self.btn_del_icon.setEnabled(True)
-        self.btn_apply_icon_all.setEnabled(True)
-        self.btn_preview.setEnabled(True)
-        self.spin_x.setEnabled(True)
-        self.spin_y.setEnabled(True)
-        self.spin_scale.setEnabled(True)
-        self.spin_video_scale.setEnabled(True)
-        self.btn_copy_scale.setEnabled(True)
-        self.btn_paste_scale.setEnabled(True)
-        self.btn_copy_icon.setEnabled(True)
-        self.btn_paste_icon.setEnabled(True)
-        self.cb_profiles.setEnabled(True)
-        self.btn_save_profile.setEnabled(True)
-        self.btn_new_profile.setEnabled(True)
-        self.btn_delete_profile.setEnabled(True)
-        self.cb_render_mode.setEnabled(True)
-        self.cb_encoder.setEnabled(True)
-        self.chk_limit_fps.setEnabled(True)
-        
+        self.set_processing_state(False)
+        self.ui_status.setText(f"Hoàn tất · {success_count}/{total_files} video thành công. Xem nhật ký nếu có lỗi.")
         self.log(f"HOÀN TẤT: Thành công {success_count}/{total_files} video.")
         QMessageBox.information(self, "Xong", f"Quá trình xử lý hoàn tất!\nThành công {success_count}/{total_files} video.")
         if save_dir and os.path.exists(save_dir):

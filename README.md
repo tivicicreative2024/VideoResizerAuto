@@ -1,5 +1,29 @@
 # 🎬 Video Resizer Tool (Windows & macOS)
 
+## Bản Windows 1.1.2 · Sửa lỗi treo khi ghép outro
+
+Video nguồn hoặc outro không có âm thanh không còn làm FFmpeg chạy mãi: track im lặng được cắt đúng bằng thời lượng của file. Bộ cài mới: `dist/VideoResizer-Setup-1.1.2-win64.exe`.
+
+## Bản Windows 1.1.1 · Giao diện gọn hơn
+
+Header và thanh bước được thu gọn. Sidebar chỉ giữ xem trước; chọn video rồi mở **Chỉnh video…** để chỉnh phóng hình/logo. Bước thiết lập ưu tiên **Tỉ lệ xuất** và **Tên file đầu ra**. Chèn mã qua menu, chỉ hiện tùy chọn đánh số khi có `%N`; ẩn đi vẫn giữ giá trị đã chọn. Outro và hiệu năng mở khi cần. Tạo/xóa mẫu nằm trong **Mẫu khác**.
+
+Bộ cài mới: `dist/VideoResizer-Setup-1.1.1-win64.exe`. Các bộ cài cũ được giữ lại.
+
+
+## Bản Windows 1.1.0 · Giao diện theo Clink
+
+Luồng mới gồm **Nguồn video → Thiết lập xuất → Kiểm tra đầu ra**. Có xem trước chạy nền, tỉ lệ xem độc lập với tỉ lệ xuất, kéo thả video vào danh sách và xem chính xác tên/đường dẫn trước khi render.
+
+Trong **Thiết lập xuất → Quy tắc đặt tên**, nhập mẫu, chọn số bắt đầu và độ dài số. Các mã hỗ trợ: `%F` tên gốc, `%N` số thứ tự tăng cho từng file xuất, `%S` tỉ lệ (`1x1`, `16x9`, `9x16`), `%D` ngày (`YYYYMMDD`), `%%` dấu phần trăm. Ví dụ `Team_CuongNM_%N_%S` tạo `Team_CuongNM_001_1x1.mp4`. Đuôi file giữ theo nguồn, không nhập thêm đuôi vào mẫu.
+
+Tên trùng tự thêm `-2`, `-3`…; không ghi đè video nguồn hoặc file đã có. Render vào vùng tạm riêng, chỉ đưa file hoàn tất ra thư mục đích; GPU lỗi được thử lại bằng CPU. Tên và tỉ lệ được lưu trong mẫu. Khi tải một mẫu, logo/tỉ lệ phóng của mẫu được áp dụng cho các video đang có.
+
+Chạy `build_installer.bat` để tạo `dist/VideoResizer-Setup-1.1.0-win64.exe`. Bản 1.0.0 được giữ lại. Bộ cài kèm font và icon để dùng offline.
+
+Kiểm tra: `.venv\Scripts\python.exe -m unittest discover -v` và `.venv\Scripts\python.exe test_packaging.py`.
+
+
 Công cụ chuyển đổi tỉ lệ khung hình video hàng loạt (**Batch Video Resizer**), tự động ghép Outro và chèn Watermark/Icon với giao diện trực quan (**GUI**) hiện đại viết bằng **Python** & **PyQt5**, tích hợp bộ xử lý đa luồng siêu tốc với **FFmpeg**, tối ưu hóa đặc biệt cho cả **máy tính cấu hình yếu lẫn máy đồ họa mạnh**, hỗ trợ đầy đủ cả **Windows** và **macOS**.
 
 ---
